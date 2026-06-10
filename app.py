@@ -13,19 +13,21 @@ st.set_page_config(
     layout="centered"
 )
 
-CAMINHO_MODELO = 'data/results/modelo_svm_alunos.pkl'
 CAMINHO_CSV = 'student_dataset_10000_rows(1).csv'
 
-# Torna o treinamento inteligente e imune a pequenos erros de nomes de colunas
-def treinar_e_salvar_modelo_automatico():
+# 2. Treinamento Dinâmico (Garante adaptação total ao arquivo do repositório)
+@st.cache_resource
+def carregar_e_treinar_svm():
     if not os.path.exists(CAMINHO_CSV):
-        st.error(f"❌ Erro: Nem o modelo `{CAMINHO_MODELO}` nem o CSV `{CAMINHO_CSV}` foram encontrados no repositório.")
+        st.error(f"❌ Erro: O arquivo de dados `{CAMINHO_CSV}` não foi encontrado no repositório.")
         st.stop()
         
     try:
+        # Detecta automaticamente o separador (vírgula ou ponto e vírgula)
         df = pd.read_csv(CAMINHO_CSV, sep=None, engine='python')
         df.columns = df.columns.str.strip()
         
+        # Mapeamento robusto das colunas por aproximação de nome
         colunas_mapeadas = {}
         for col in df.columns:
             col_lower = col.lower()
@@ -42,10 +44,11 @@ def treinar_e_salvar_modelo_automatico():
             elif 'prev' in col_lower or 'nota' in col_lower or 'score' in col_lower:
                 colunas_mapeadas['previous_score'] = col
 
+        # Identifica a coluna alvo (Target)
         coluna_alvo = None
         for col in df.columns:
             if col not in colunas_mapeadas.values():
-                if any(k in col.lower() for k in ['perf', 'label', 'class', 'res', 'status', 'alvo', 'index', 'place']):
+                if any(k in col.lower() for k in ['perf', 'label', 'class', 'res', 'status', 'alvo', 'place']):
                     coluna_alvo = col
                     break
         
@@ -57,49 +60,32 @@ def treinar_e_salvar_modelo_automatico():
         features_obrigatorias = ['study_hours', 'attendance', 'sleep_hours', 'internet_usage', 'assignments_completed', 'previous_score']
         
         if len(colunas_mapeadas) < len(features_obrigatorias) or not coluna_alvo:
-            st.error("❌ Não foi possível alinhar as colunas do seu CSV automaticamente.")
-            st.write("Colunas encontradas no seu arquivo:", df.columns.tolist())
+            st.error("❌ Erro ao alinhar as colunas do arquivo CSV.")
             st.stop()
 
+        # Organiza os dados na ordem correta
         X = df[[colunas_mapeadas[f] for f in features_obrigatorias]]
         y = df[coluna_alvo]
 
+        # Pré-processamento
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
         label_encoder = LabelEncoder()
         y_encoded = label_encoder.fit_transform(y)
 
-        # CORREÇÃO: Adicionado class_weight='balanced' para evitar que o SVM ignore classes menores
-        svm_model = SVC(kernel='rbf', C=1.0, gamma='scale', class_weight='balanced', random_state=42)
+        # SOLUÇÃO: Kernel linear + balanced impede o modelo de ficar preso em uma única previsão
+        svm_model = SVC(kernel='linear', C=1.0, class_weight='balanced', random_state=42)
         svm_model.fit(X_scaled, y_encoded)
-
-        os.makedirs(os.path.dirname(CAMINHO_MODELO), exist_ok=True)
-        dados_para_salvar = {
-            'model': svm_model,
-            'scaler': scaler,
-            'label_encoder': label_encoder
-        }
-        with open(CAMINHO_MODELO, 'wb') as f:
-            pickle.dump(dados_para_salvar, f)
-            
+        
         return svm_model, scaler, label_encoder
 
     except Exception as e:
-        st.error(f"Erro ao processar o arquivo de dados: {e}")
+        st.error(f"Erro ao processar e treinar o modelo: {e}")
         st.stop()
 
-# 2. Carregar ou Inicializar os Componentes do Modelo
-@st.cache_resource
-def carregar_ou_treinar():
-    if os.path.exists(CAMINHO_MODELO):
-        with open(CAMINHO_MODELO, 'rb') as f:
-            data = pickle.load(f)
-        return data['model'], data['scaler'], data['label_encoder']
-    else:
-        return treinar_e_salvar_modelo_automatico()
-
-svm_model, scaler, labelencoder = carregar_ou_treinar()
+# Inicializa o modelo dinamicamente e guarda em cache na memória do app
+svm_model, scaler, labelencoder = carregar_e_treinar_svm()
 
 # 3. Cabeçalho da Interface
 st.title("📊 Previsão de Rendimento Escolar")
@@ -130,6 +116,7 @@ if st.button("Prever Rendimento", use_container_width=True, type="primary"):
     pred_num = svm_model.predict(entrada_scaled)[0]
     pred_label = labelencoder.inverse_transform([pred_num])[0]
     
+    # 6. Exibição Dinâmica dos Resultados em Português
     st.markdown("#### Resultado da Análise:")
     label_str = str(pred_label).strip().lower()
     
@@ -141,18 +128,3 @@ if st.button("Prever Rendimento", use_container_width=True, type="primary"):
         st.error("⚠️ Rendimento Baixo")
     else:
         st.info(f"Resultado: {pred_label}")
-
-# 6. PAINEL DE DIAGNÓSTICO (Apenas visualização para checar discrepâncias)
-st.write("---")
-with st.expander("🔍 Painel de Investigação do Dataset (Clique para expandir)"):
-    if os.path.exists(CAMINHO_CSV):
-        df_debug = pd.read_csv(CAMINHO_CSV, sep=None, engine='python')
-        df_debug.columns = df_debug.columns.str.strip()
-        
-        st.write("**1. Distribuição Real das Respostas no seu CSV:**")
-        st.write(df_debug.iloc[:, -1].value_counts())
-        
-        st.write("**2. Médias e Máximos do seu CSV (Verifique se batem com o que você digita):**")
-        st.dataframe(df_debug.describe().loc[['mean', 'min', 'max']])
-    else:
-        st.write("CSV não encontrado para gerar métricas de diagnóstico.")
