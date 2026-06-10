@@ -50,7 +50,7 @@ def treinar_e_salvar_modelo_automatico():
         coluna_alvo = None
         for col in df.columns:
             if col not in colunas_mapeadas.values():
-                if any(k in col.lower() for k in ['perf', 'label', 'class', 'res', 'status', 'alvo', 'index']):
+                if any(k in col.lower() for k in ['perf', 'label', 'class', 'res', 'status', 'alvo', 'index', 'place']):
                     coluna_alvo = col
                     break
         
@@ -139,15 +139,15 @@ if st.button("Prever Rendimento", use_container_width=True, type="primary"):
     pred_num = svm_model.predict(entrada_scaled)[0]
     pred_label = labelencoder.inverse_transform([pred_num])[0]
     
-    # 6. Exibição Dinâmica dos Resultados (compatível com inglês ou português no CSV)
+    # 6. Exibição Dinâmica dos Resultados (Corrigido para traduzir 'Placed')
     st.markdown("#### Resultado da Análise:")
     label_str = str(pred_label).strip().lower()
     
-    if label_str in ["alto", "high"]:
+    if label_str in ["alto", "high", "placed"]:
         st.success("🎉 Rendimento Alto")
     elif label_str in ["médio", "medio", "medium"]:
         st.warning("📘 Rendimento Médio")
-    elif label_str in ["baixo", "low"]:
+    elif label_str in ["baixo", "low", "not placed"]:
         st.error("⚠️ Rendimento Baixo")
     else:
         st.info(f"Resultado: {pred_label}")
