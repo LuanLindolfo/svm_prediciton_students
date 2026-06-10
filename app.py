@@ -1,76 +1,52 @@
-import streamlit as st
-import pickle
+import pandas as pd
 import numpy as np
+import pickle
 import os
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-# 1. Configuração da Página
-st.set_page_config(
-    page_title="Previsão de Rendimento Escolar",
-    page_icon="📊",
-    layout="centered"
-)
+# 1. Carregar o seu dataset
+# Certifique-se de que o arquivo está na mesma pasta ou ajuste o caminho
+df = pd.read_csv('student_dataset_10000_rows(1).csv')
 
-# 2. Carregar o Modelo e Objetos de Pré-processamento
-@st.cache_resource
-def carregar_modelo():
-    # Caminho atualizado para apontar para o modelo SVM
-    caminho_modelo = 'data/results/modelo_svm_alunos.pkl'
-    
-    if not os.path.exists(caminho_modelo):
-        st.error(f"⚠️ O arquivo '{caminho_modelo}' não foi encontrado. Verifique se o push para o GitHub funcionou e se o nome do arquivo está correto.")
-        st.stop()
-        
-    with open(caminho_modelo, 'rb') as f:
-        data = pickle.load(f)
-        
-    return data['model'], data['scaler'], data['label_encoder']
+# =====================================================================
+# IMPORTANTÍSSIMO: Ajuste os nomes das colunas abaixo de acordo com o seu CSV!
+# A ordem aqui DEVE ser a mesma ordem que organizamos no arquivo app.py:
+# [study_hours, attendance, sleep_hours, internet_usage, assignments_completed, previous_score]
+# =====================================================================
+colunas_features = ['study_hours', 'attendance', 'sleep_hours', 'internet_usage', 'assignments_completed', 'previous_score']
+coluna_alvo = 'performance_label' # Nome da coluna que tem "Alto", "Médio", "Baixo"
 
-# Inicializando o modelo (variável renomeada para svm_model)
-try:
-    svm_model, scaler, labelencoder = carregar_modelo()
-except Exception as e:
-    st.error(f"Erro ao carregar os componentes do modelo: {e}")
-    st.stop()
+X = df[colunas_features]
+y = df[coluna_alvo]
 
-# 3. Cabeçalho da Interface
-st.title("📊 Previsão de Rendimento Escolar")
-# Texto atualizado para refletir o uso do SVM
-st.markdown("### Support Vector Machine (SVM) — preencha os dados do aluno")
-st.divider()
+# 2. Pré-processamento
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-# 4. Criando o Layout (Grid 2x3)
-col1, col2 = st.columns(2)
+label_encoder = LabelEncoder()
+y_encoded = label_encoder.fit_transform(y)
 
-with col1:
-    study_hours = st.number_input("Horas de estudo/dia", min_value=0.0, max_value=24.0, value=4.0, step=0.5)
-    sleep_hours = st.number_input("Horas de sono/dia", min_value=0.0, max_value=24.0, value=7.0, step=0.5)
-    assignments_completed = st.number_input("Tarefas entregues (%)", min_value=0.0, max_value=100.0, value=85.0, step=1.0)
+# 3. Treinar o modelo SVM
+# Usando C e gamma padrão, altere se fez tuning de hiperparâmetros
+modelo_svm = SVC(kernel='rbf', C=1.0, random_state=42)
+modelo_svm.fit(X_scaled, y_encoded)
 
-with col2:
-    attendance = st.number_input("Frequência (%)", min_value=0.0, max_value=100.0, value=90.0, step=1.0)
-    internet_usage = st.number_input("Uso de internet (h/dia)", min_value=0.0, max_value=24.0, value=2.0, step=0.5)
-    previous_score = st.number_input("Nota anterior (0–100)", min_value=0.0, max_value=100.0, value=75.0, step=1.0)
+print("✅ Modelo SVM treinado com sucesso!")
 
-st.write("") # Espaçamento
+# 4. Criar a estrutura de pastas e salvar o dicionário com os objetos
+os.makedirs('data/results', exist_ok=True)
+caminho_salvamento = 'data/results/modelo_svm_alunos.pkl'
 
-# 5. Botão de Previsão e Lógica
-if st.button("Prever Rendimento", use_container_width=True, type="primary"):
-    # Organizando a entrada (Verifique se a ordem bate com X.columns do seu treino)
-    dados = [study_hours, attendance, sleep_hours, internet_usage, assignments_completed, previous_score]
-    entrada = np.array(dados).reshape(1, -1)
-    
-    # Transformação com o Scaler e Previsão (chamando svm_model)
-    entrada_scaled = scaler.transform(entrada)
-    pred_num = svm_model.predict(entrada_scaled)[0]
-    pred_label = labelencoder.inverse_transform([pred_num])[0]
-    
-    # 6. Exibição Dinâmica dos Resultados
-    st.markdown("#### Resultado da Análise:")
-    if pred_label == "Alto":
-        st.success("🎉 Rendimento Alto")
-    elif pred_label == "Médio":
-        st.warning("📘 Rendimento Médio")
-    elif pred_label == "Baixo":
-        st.error("⚠️ Rendimento Baixo")
-    else:
-        st.info(f"Resultado: {pred_label}")
+dados_para_salvar = {
+    'model': modelo_svm,
+    'scaler': scaler,
+    'label_encoder': label_encoder
+}
+
+with open(caminho_salvamento, 'wb') as f:
+    pickle.dump(dados_para_salvar, f)
+
+print(f"🎉 Arquivo salvo com sucesso em: {caminho_salvamento}")
+print("Agora é só enviar esse arquivo para o seu repositório no GitHub!")
