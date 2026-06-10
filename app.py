@@ -13,11 +13,11 @@ st.set_page_config(
 # 2. Carregar o Modelo e Objetos de Pré-processamento
 @st.cache_resource
 def carregar_modelo():
-    # Caminho relativo baseado na pasta onde você salvou via GitHub no Colab
-    caminho_modelo = 'data/results/modelo_rf_alunos.pkl'
+    # Caminho atualizado para apontar para o modelo SVM
+    caminho_modelo = 'data/results/modelo_svm_alunos.pkl'
     
     if not os.path.exists(caminho_modelo):
-        st.error(f"⚠️ O arquivo '{caminho_modelo}' não foi encontrado. Verifique se o push para o GitHub funcionou.")
+        st.error(f"⚠️ O arquivo '{caminho_modelo}' não foi encontrado. Verifique se o push para o GitHub funcionou e se o nome do arquivo está correto.")
         st.stop()
         
     with open(caminho_modelo, 'rb') as f:
@@ -25,16 +25,17 @@ def carregar_modelo():
         
     return data['model'], data['scaler'], data['label_encoder']
 
-# Inicializando o modelo
+# Inicializando o modelo (variável renomeada para svm_model)
 try:
-    rf_model, scaler, labelencoder = carregar_modelo()
+    svm_model, scaler, labelencoder = carregar_modelo()
 except Exception as e:
     st.error(f"Erro ao carregar os componentes do modelo: {e}")
     st.stop()
 
 # 3. Cabeçalho da Interface
 st.title("📊 Previsão de Rendimento Escolar")
-st.markdown("### Random Forest — preencha os dados do aluno")
+# Texto atualizado para refletir o uso do SVM
+st.markdown("### Support Vector Machine (SVM) — preencha os dados do aluno")
 st.divider()
 
 # 4. Criando o Layout (Grid 2x3)
@@ -58,9 +59,9 @@ if st.button("Prever Rendimento", use_container_width=True, type="primary"):
     dados = [study_hours, attendance, sleep_hours, internet_usage, assignments_completed, previous_score]
     entrada = np.array(dados).reshape(1, -1)
     
-    # Transformação com o Scaler e Previsão
+    # Transformação com o Scaler e Previsão (chamando svm_model)
     entrada_scaled = scaler.transform(entrada)
-    pred_num = rf_model.predict(entrada_scaled)[0]
+    pred_num = svm_model.predict(entrada_scaled)[0]
     pred_label = labelencoder.inverse_transform([pred_num])[0]
     
     # 6. Exibição Dinâmica dos Resultados
