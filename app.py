@@ -23,13 +23,9 @@ def treinar_e_salvar_modelo_automatico():
         st.stop()
         
     try:
-        # sep=None e engine='python' detectam automaticamente se é vírgula ou ponto e vírgula
         df = pd.read_csv(CAMINHO_CSV, sep=None, engine='python')
-        
-        # Corrige o problema de espaços invisíveis nos nomes das colunas
         df.columns = df.columns.str.strip()
         
-        # Mapeamento inteligente por aproximação de texto (ignora maiúsculas/minúsculas)
         colunas_mapeadas = {}
         for col in df.columns:
             col_lower = col.lower()
@@ -46,7 +42,6 @@ def treinar_e_salvar_modelo_automatico():
             elif 'prev' in col_lower or 'nota' in col_lower or 'score' in col_lower:
                 colunas_mapeadas['previous_score'] = col
 
-        # Identifica a coluna alvo dinamicamente
         coluna_alvo = None
         for col in df.columns:
             if col not in colunas_mapeadas.values():
@@ -61,28 +56,24 @@ def treinar_e_salvar_modelo_automatico():
 
         features_obrigatorias = ['study_hours', 'attendance', 'sleep_hours', 'internet_usage', 'assignments_completed', 'previous_score']
         
-        # Se falhar em mapear, mostra as colunas reais para o usuário
         if len(colunas_mapeadas) < len(features_obrigatorias) or not coluna_alvo:
             st.error("❌ Não foi possível alinhar as colunas do seu CSV automaticamente.")
             st.write("Colunas encontradas no seu arquivo:", df.columns.tolist())
             st.stop()
 
-        # Garante a ordem exata das colunas
         X = df[[colunas_mapeadas[f] for f in features_obrigatorias]]
         y = df[coluna_alvo]
 
-        # Pré-processamento
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
         label_encoder = LabelEncoder()
         y_encoded = label_encoder.fit_transform(y)
 
-        # Treinamento do SVM
-        svm_model = SVC(kernel='rbf', C=1.0, random_state=42)
+        # CORREÇÃO: Adicionado class_weight='balanced' para evitar que o SVM ignore classes menores
+        svm_model = SVC(kernel='rbf', C=1.0, gamma='scale', class_weight='balanced', random_state=42)
         svm_model.fit(X_scaled, y_encoded)
 
-        # Salva o arquivo final para não precisar treinar toda vez que a página recarregar
         os.makedirs(os.path.dirname(CAMINHO_MODELO), exist_ok=True)
         dados_para_salvar = {
             'model': svm_model,
@@ -139,7 +130,6 @@ if st.button("Prever Rendimento", use_container_width=True, type="primary"):
     pred_num = svm_model.predict(entrada_scaled)[0]
     pred_label = labelencoder.inverse_transform([pred_num])[0]
     
-    # 6. Exibição Dinâmica dos Resultados (Corrigido para traduzir 'Placed')
     st.markdown("#### Resultado da Análise:")
     label_str = str(pred_label).strip().lower()
     
@@ -151,3 +141,18 @@ if st.button("Prever Rendimento", use_container_width=True, type="primary"):
         st.error("⚠️ Rendimento Baixo")
     else:
         st.info(f"Resultado: {pred_label}")
+
+# 6. PAINEL DE DIAGNÓSTICO (Apenas visualização para checar discrepâncias)
+st.write("---")
+with st.expander("🔍 Painel de Investigação do Dataset (Clique para expandir)"):
+    if os.path.exists(CAMINHO_CSV):
+        df_debug = pd.read_csv(CAMINHO_CSV, sep=None, engine='python')
+        df_debug.columns = df_debug.columns.str.strip()
+        
+        st.write("**1. Distribuição Real das Respostas no seu CSV:**")
+        st.write(df_debug.iloc[:, -1].value_counts())
+        
+        st.write("**2. Médias e Máximos do seu CSV (Verifique se batem com o que você digita):**")
+        st.dataframe(df_debug.describe().loc[['mean', 'min', 'max']])
+    else:
+        st.write("CSV não encontrado para gerar métricas de diagnóstico.")
